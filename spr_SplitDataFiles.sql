@@ -1,10 +1,80 @@
-USE AdminDB
+USE [AdminDB] -- set a database, in which you want to create this procedure (do not use system databases)
 GO
 
-ALTER PROCEDURE spr_SplitDataFiles
+/*
+Author: Antonio Turkovic (Microsoft Data&AI CE)
+Version: 202009-01
+Supported SQL Server Versions: >= SQL Server 2016 RTM (Standard and Enterprise Edition)	
+
+Description:
+This script can be used to distribute data among "n" data files per filegroup.
+It can be also used to increase or reduce the amount of data files while keeping an even data distribution.
+
+Requirements:
+- User must have SYSADMIN privileges
+- Ensure you have enough disk space (2.5 - 3 times the data)
+- BEFORE running the process, perform a FULL backup of your database (database will be set to SIMPLE recovery model)
+- AFTER running the process, perform another FULL backup to start a new backup chain (database will be set to the initial recovery model)
+
+Parameter:
+	- @dbName: Specify the database you want to work with
+		- Database must not be a member of an Availability Group
+		- Ensure that no users are working on the database during the entire process
+
+	- @fileGroup: Specify an existing filegroup in the database in which you want to split the data files
+		- The filegroup must not be "read-only"
+		- During the process, the "AUTOGROW_ALL_FILES" option will be set on this filegroup
+
+	- @tempFileName: Specify a temporary filename that will hold the entire data in the specific filegroup
+		- Ensure that there is enough disk space available (will be checked by the script)
+		- you must provide the fullname of the file: eg.: D:\MSSQL\data\tempfile.ndf
+		- The logical name of the file will be the filename without the extension: eg.: tempfile
+
+	- @newFilename: Specify new files to which the data will be distributed
+		- Ensure that there is enough disk space available (will not be checked by the script - error will be thrown)
+		- you must specify at least 2 files
+		- Use ";" to specify each file: eg.: D:\MSSQL\data\db_file01.ndf; D:\MSSQL\data\db_file02.ndf
+		- you must provide the fullname for each file
+		- the logical name of each file will be the filename without the extension: eg.: db_file01 / db_file02
+		- each file will have the same initial size (number to the power of 2)
+		- each file will have an autogrowth of 1024 MB configured
+		- if you are working with the primary filegroup, make sure that you also count the MDF file to the amount of files
+		- if you are working with the primary filegroup, the MDF file will be configured with the same initial size as for the new files
+
+Best Practices:
+	- Please apply the same best practices as for the tempdb
+		- https://docs.microsoft.com/en-us/sql/relational-databases/databases/tempdb-database?view=sql-server-ver15
+		- Review section "Optimizing tempdb performance in SQL Server"
+	- The amount of available logical CPUs = amount of data files (max 8 files)
+	- To get the best performance, place each file on a separate disk / mountpoint
+
+Example:
+	- On a server with 4 CPUs
+	- EXEC dbo.spr_SplitDataFiles @dbName = 'myDB',
+								  @fileGroup = 'PRIMARY',
+								  @tempFilename = 'D:\MSSQL\data\myDB_temp.ndf',
+								  @newFilename = 'D:\MSSQL\data\myDB_file02.ndf;
+												  D:\MSSQL\data\myDB_file03.ndf;
+												  D:\MSSQL\data\myDB_file04.ndf'
+
+Output:
+	- Review the "Messages" for details about the process
+*/
+
+
+CREATE PROCEDURE spr_SplitDataFiles
+	-- Specify a database name
 	@dbName NVARCHAR(256) = '',
+	-- Specify the filegroup in which you want to distribute the data (data can only be distributed in the same filegroup)
 	@fileGroup NVARCHAR(256) = 'PRIMARY',
+	-- In order to distribute the data, a temporary file is required, which will hold the entire data
+	-- Provide the filename including the filepath, name and extension
+	-- eg. D:\MSSQL\tempfile.ndf
 	@tempFilename NVARCHAR(256) = '',
+	-- Specify the new file names to which the data will be distributed
+	-- Use ";" to specify multiple data files
+	-- You need to specify at least 2 data files
+	-- eg. D:\MSSQL\data01.ndf;D:\MSSQL\data02.ndf
 	@newFilename NVARCHAR(MAX)	 = ''
 AS
 BEGIN
