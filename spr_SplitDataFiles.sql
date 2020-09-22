@@ -472,8 +472,8 @@ BEGIN
 		SELECT 1
 		FROM msdb.dbo.sysjobhistory
 		WHERE step_name = @jobStepMoveToTemp
-		AND (message LIKE '%Cannot move all contents of file "%" to other places to complete the emptyfile operation%'
-			 OR message LIKE '%The step succeeded%')
+		AND ([message] LIKE '%Cannot move all contents of file "%" to other places to complete the emptyfile operation%'
+			 OR [message] LIKE '%The step succeeded%')
 	)
 	BEGIN
 		-- Count files in Filegroup
@@ -732,10 +732,6 @@ BEGIN
 
 
 	-- Check job status
-	SELECT 1
-		FROM msdb.dbo.sysjobhistory
-		WHERE step_name = @jobNameSpreadData
-		AND [message] LIKE '%The step succeeded%'
 	-- CHECK status of job
 	IF EXISTS (
 		SELECT 1
