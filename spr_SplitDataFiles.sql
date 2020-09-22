@@ -52,11 +52,11 @@ Best Practices:
 Example:
 	- On a server with 4 CPUs
 	- EXEC dbo.spr_SplitDataFiles @dbName = 'myDB',
-								  @fileGroup = 'PRIMARY',
-								  @tempFilename = 'D:\MSSQL\data\myDB_temp.ndf',
-								  @newFilename = 'D:\MSSQL\data\myDB_file02.ndf;
-												  D:\MSSQL\data\myDB_file03.ndf;
-												  D:\MSSQL\data\myDB_file04.ndf'
+				      @fileGroup = 'PRIMARY',
+				      @tempFilename = 'D:\MSSQL\data\myDB_temp.ndf',
+				      @newFilename = 'D:\MSSQL\data\myDB_file02.ndf;
+						      D:\MSSQL\data\myDB_file03.ndf;
+						      D:\MSSQL\data\myDB_file04.ndf'
 
 Output:
 	- Review the "Messages" for details about the process
