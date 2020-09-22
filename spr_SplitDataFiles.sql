@@ -14,6 +14,7 @@ It can be also used to increase or reduce the amount of data files while keeping
 Requirements:
 - User must have SYSADMIN privileges
 - Ensure you have enough disk space (2.5 - 3 times the data)
+- Call the procedure only on the SQL Server itself to prevent any remote procedure timeouts
 - BEFORE running the process, perform a FULL backup of your database (database will be set to SIMPLE recovery model)
 - AFTER running the process, perform another FULL backup to start a new backup chain (database will be set to the initial recovery model)
 
@@ -52,11 +53,11 @@ Best Practices:
 Example:
 	- On a server with 4 CPUs
 	- EXEC dbo.spr_SplitDataFiles @dbName = 'myDB',
-				      @fileGroup = 'PRIMARY',
-				      @tempFilename = 'D:\MSSQL\data\myDB_temp.ndf',
-				      @newFilename = 'D:\MSSQL\data\myDB_file02.ndf;
-						      D:\MSSQL\data\myDB_file03.ndf;
-						      D:\MSSQL\data\myDB_file04.ndf'
+								  @fileGroup = 'PRIMARY',
+								  @tempFilename = 'D:\MSSQL\data\myDB_temp.ndf',
+								  @newFilename = 'D:\MSSQL\data\myDB_file02.ndf;
+												  D:\MSSQL\data\myDB_file03.ndf;
+												  D:\MSSQL\data\myDB_file04.ndf'
 
 Output:
 	- Review the "Messages" for details about the process
