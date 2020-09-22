@@ -8,7 +8,8 @@ Supported SQL Server Versions: >= SQL Server 2016 RTM (Standard and Enterprise E
 
 Description:
 This script can be used to distribute data among "n" data files per filegroup.
-It can be also used to increase or reduce the amount of data files while keeping an even data distribution.
+It will create a stored procedure called "dbo.spr_SplitDataFiles".
+It can be also used to increase or reduce the amount of data files while keeping an even data distribution (per filegroup).
 
 Requirements:
 - User must have SYSADMIN privileges
