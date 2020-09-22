@@ -11,6 +11,8 @@ This script can be used to distribute data among "n" data files per filegroup.
 It will create a stored procedure called "dbo.spr_SplitDataFiles".
 It can be also used to increase or reduce the amount of data files while keeping an even data distribution (per filegroup).
 
+WARNING: Running this procedure can take a very long time to process depending on the amount of data
+
 Requirements:
 - User must have SYSADMIN privileges
 - Ensure you have enough disk space (2.5 - 3 times the data)
