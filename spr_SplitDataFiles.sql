@@ -47,7 +47,7 @@ Parameter:
 
 Best Practices:
 	- Please apply the same best practices as for the tempdb
-		- https://docs.microsoft.com/en-us/sql/relational-databases/databases/tempdb-database?view=sql-server-ver15
+		- https://docs.microsoft.com/en-us/sql/relational-databases/databases/tempdb-database?view=sql-server-ver15#optimizing-tempdb-performance-in-sql-server
 		- Review section "Optimizing tempdb performance in SQL Server"
 	- The amount of available logical CPUs = amount of data files (max 8 files)
 	- To get the best performance, place each file on a separate disk / mountpoint
@@ -66,7 +66,7 @@ Output:
 */
 
 
-CREATE PROCEDURE spr_SplitDataFiles
+CREATE OR ALTER PROCEDURE spr_SplitDataFiles
 	-- Specify a database name
 	@dbName NVARCHAR(256) = '',
 	-- Specify the filegroup in which you want to distribute the data (data can only be distributed in the same filegroup)
@@ -79,7 +79,10 @@ CREATE PROCEDURE spr_SplitDataFiles
 	-- Use ";" to specify multiple data files
 	-- You need to specify at least 2 data files
 	-- eg. D:\MSSQL\data01.ndf;D:\MSSQL\data02.ndf
-	@newFilename NVARCHAR(MAX)	 = ''
+	@newFilename NVARCHAR(MAX)	 = '',
+	--Specify which user should be the owner of the jobs  (that will perform the actions)
+	-- Default is "SA"
+	@jobOwner NVARCHAR(256) = 'sa'
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -144,6 +147,9 @@ BEGIN
 
 	--Move data to all Files Job Step
 	DECLARE @jobStepSpreadData NVARCHAR(256) = @jobDescSpreadData
+
+	-- Job Id
+	DECLARE @jobId UNIQUEIDENTIFIER
 
 	-- Variable for all target files
 	DECLARE @tblTargetFilenames TABLE (
@@ -466,7 +472,7 @@ BEGIN
 			@delete_level=0, 
 			@description=@jobDescMoveToTemp, 
 			@category_name=N'[Uncategorized (Local)]', 
-			@owner_login_name=N'sa';
+			@owner_login_name=@jobOwner;
 
 	EXEC msdb.dbo.sp_add_jobstep @job_name = @jobNameMoveToTemp, @step_name=@jobNameMoveToTemp, 
 			@step_id=1, 
@@ -492,6 +498,13 @@ BEGIN
 		RAISERROR(@msg, 10, 1) WITH NOWAIT;
 		GOTO CleanupSection;
 	END CATCH
+
+	-- Get Job Id
+	SET @jobId = (
+		SELECT [job_id] 
+		FROM msdb.dbo.sysjobs 
+		WHERE [name] = @jobNameMoveToTemp
+	)
 
 	--###################################
 	-- Start job move to temp
@@ -576,8 +589,24 @@ BEGIN
 		BEGIN
 			SET @msg = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss') + ' | ERROR | Data movement to temporary data file failed';
 			RAISERROR(@msg, 10, 1) WITH NOWAIT;
-			GOTO CleanupSection;
+			SET @msg = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss') + ' | WARN | Please delete data movement agent job manually';
+			RAISERROR(@msg, 10, 1) WITH NOWAIT;
+			GOTO CleanupSection; 
 		END
+	END
+	ELSE
+	BEGIN
+		SET @msg = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss') + ' | ERROR | Data movement to temporary data file job failed';
+		RAISERROR(@msg, 10, 1) WITH NOWAIT;
+		SET @msg = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss') + ' | ERROR | ' + 
+			(SELECT [message]
+			FROM msdb.dbo.sysjobhistory
+			WHERE step_name = '(Job outcome)'
+			AND job_id = @jobId);
+		RAISERROR(@msg, 10, 1) WITH NOWAIT;
+		SET @msg = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss') + ' | WARN | Please delete data movement agent job manually';
+		RAISERROR(@msg, 10, 1) WITH NOWAIT;
+		GOTO CleanupSection;
 	END
 
 	-- Delete Job Temp Movement
@@ -592,6 +621,7 @@ BEGIN
 		'Error Message: ' + ERROR_MESSAGE();
 		RAISERROR(@msg, 10, 1) WITH NOWAIT;
 	END CATCH
+
 
 	--########################################
 	-- Plan the new files
@@ -640,7 +670,7 @@ BEGIN
 		BEGIN
 			-- Shrink file to initial size
 			SET @cmd = '
-				USE [LargeDB1FG];
+				USE [' + @dbName + '];
 				DBCC SHRINKFILE (N''' + (SELECT CONVERT(NVARCHAR(MAX), name) FROM master.sys.master_files WHERE type = 0 AND file_id = 1 AND database_id = DB_ID(@dbName)) + ''' , ' + CONVERT(NVARCHAR(MAX), @newInitFileSizeMB) + ');
 			';
 		END
@@ -728,7 +758,7 @@ BEGIN
 			@delete_level=0, 
 			@description=@jobDescSpreadData, 
 			@category_name=N'[Uncategorized (Local)]', 
-			@owner_login_name=N'sa';
+			@owner_login_name=@jobOwner;
 
 	EXEC msdb.dbo.sp_add_jobstep @job_name = @jobNameSpreadData, @step_name=@jobNameSpreadData, 
 			@step_id=1, 
@@ -755,6 +785,12 @@ BEGIN
 		GOTO CleanupSection;
 	END CATCH
 
+	-- Get Job id
+	SET @jobId = (
+		SELECT [job_id] 
+		FROM msdb.dbo.sysjobs 
+		WHERE [name] = @jobNameSpreadData
+	)
 
 	-- Start job
 	SET @msg = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss') + ' | INFO | Starting job: ' + @jobNameSpreadData
@@ -822,7 +858,8 @@ BEGIN
 		SET @msg = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss') + ' | ERROR | Splitting data to multiple data failed' + CHAR(13) + CHAR(10) +
 		(SELECT CONVERT(NVARCHAR(MAX), message)
 		 FROM msdb.dbo.sysjobhistory
-		 WHERE step_name = @jobStepSpreadData)
+		 WHERE step_name = '(Job outcome)'
+		 AND job_id = @jobId)
 		 RAISERROR(@msg, 10, 1) WITH NOWAIT;
 	END
 
